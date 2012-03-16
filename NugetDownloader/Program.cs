@@ -11,14 +11,24 @@ namespace NugetDownloader
     {
         static void Main(string[] args)
         {
+            if (args.Length != 2)
+            {
+                Console.WriteLine("Syntax: NugetDownloader targetFolder numOfPackages");
+                return;
+            }
+
             var downloadFolder = new DirectoryInfo(args[0]);
+            var count = Int32.Parse(args[1]);
 
             var remoteRepo = new DataServicePackageRepository(
                 new Uri("https://nuget.org/api/v2/"));
 
             var localRepo = new LocalPackageRepository(downloadFolder.FullName);
 
-            var packages = remoteRepo.GetPackages().OrderByDescending(p => p.DownloadCount).Take(10);
+            var packages = remoteRepo.GetPackages()
+                .Where(p => p.IsLatestVersion)
+                .OrderByDescending(p => p.DownloadCount)
+                .Take(count);
 
             foreach (IPackage package in packages)
             {

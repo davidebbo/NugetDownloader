@@ -1,14 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using NuGet;
+﻿using NuGet;
+using System;
 using System.IO;
+using System.Linq;
 
 namespace NugetDownloader
 {
     class Program
     {
+        static readonly Uri nugetUri = new Uri("https://nuget.org/api/v2/");
+
         static void Main(string[] args)
         {
             if (args.Length != 2)
@@ -18,35 +18,58 @@ namespace NugetDownloader
             }
 
             var downloadFolder = new DirectoryInfo(args[0]);
-            var count = Int32.Parse(args[1]);
+            var packageCount = Int32.Parse(args[1]);
+            var localRepository = new LocalPackageRepository(downloadFolder.FullName);
 
-            var remoteRepo = new DataServicePackageRepository(
-                new Uri("https://nuget.org/api/v2/"));
-
-            var localRepo = new LocalPackageRepository(downloadFolder.FullName);
-
-            var packages = remoteRepo.GetPackages()
-                .Where(p => p.IsLatestVersion)
-                .OrderByDescending(p => p.DownloadCount)
-                .Take(count);
-
-            foreach (IPackage package in packages)
+            DataServicePackageRepository remoteRepo = null;
+            try
             {
-                Console.WriteLine(package.Id + " " + package.Version);
+                remoteRepo = new DataServicePackageRepository(nugetUri);
 
-                localRepo.AddPackage(package);
+                var packages = remoteRepo.GetPackages()
+                    .Where(p => p.IsLatestVersion)
+                    .OrderByDescending(p => p.DownloadCount)
+                    .Take(packageCount);
+
+                foreach (IPackage eachPackage in packages)
+                {
+                    try
+                    {
+                        Console.Write(eachPackage.Id + " " + eachPackage.Version + " ... ");
+                        localRepository.AddPackage(eachPackage);
+                        Console.WriteLine("OK");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("FAILED");
+                        Console.WriteLine("[EXCEPTION] " + ex.Message);
+                    }
+                }
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[EXCEPTION] " + ex.Message);
+                return;
             }
 
-            // The packages end up in a folder, so move them directly in the top folder
             foreach (var file in downloadFolder.EnumerateFiles("*.nupkg", SearchOption.AllDirectories))
             {
-                file.MoveTo(Path.Combine(downloadFolder.FullName, file.Name));
+                try
+                {
+                    var targetPath = Path.Combine(downloadFolder.FullName, file.Name);
+                    if (!File.Exists(targetPath))
+                        file.MoveTo(targetPath);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("[EXCEPTION] " + ex.Message);
+                }
             }
 
-            // Delete the folders
             foreach (var dir in downloadFolder.EnumerateDirectories())
             {
-                dir.Delete();
+                dir.Delete(true);
             }
         }
     }
